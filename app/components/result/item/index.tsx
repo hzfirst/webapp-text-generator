@@ -17,6 +17,9 @@ import RefreshCcw01 from '@/app/components/base/icons/line/refresh-ccw-01'
 import CodeEditor from '@/app/components/result/workflow/code-editor'
 import WorkflowProcessItem from '@/app/components/result/workflow/workflow-process'
 import { CodeLanguage } from '@/types/app'
+import RichAnswer, {
+  parseRichAnswer,
+} from '@/app/components/result/rich-answer'
 
 export type IGenerationItemProps = {
   isWorkflow?: boolean
@@ -73,6 +76,12 @@ const GenerationItem: FC<IGenerationItemProps> = ({
 }) => {
   const { t } = useTranslation()
   const isTop = depth === 1
+
+  const richAnswer = parseRichAnswer(content)
+
+  const contentLength = typeof content === 'string'
+    ? content.length
+    : JSON.stringify(content ?? {}).length
 
   const [completionRes, setCompletionRes] = useState('')
   const [childMessageId, setChildMessageId] = useState<string | null>(null)
@@ -156,18 +165,30 @@ const GenerationItem: FC<IGenerationItemProps> = ({
                 {isError && (
                   <div className='text-gray-400 text-sm'>{t('app.generation.batchFailed.outputPlaceholder')}</div>
                 )}
-                {!isError && (typeof content === 'string') && (
-                  <Markdown content={content} />
+                {/* 结构化图文视频结果 */}
+                {!isError && richAnswer && (
+                  <RichAnswer data={richAnswer} />
                 )}
-                {!isError && (typeof content !== 'string') && (
-                  <CodeEditor
-                    readOnly
-                    title={<div />}
-                    language={CodeLanguage.json}
-                    value={content}
-                    isJSONStringifyBeauty
-                  />
-                )}
+
+                {/* 普通字符串继续使用 Markdown */}
+                {!isError
+                  && !richAnswer
+                  && typeof content === 'string' && (
+                    <Markdown content={content} />
+                  )}
+
+                {/* 其他未知对象继续显示 JSON */}
+                {!isError
+                  && !richAnswer
+                  && typeof content !== 'string' && (
+                    <CodeEditor
+                      readOnly
+                      title={<div />}
+                      language={CodeLanguage.json}
+                      value={content}
+                      isJSONStringifyBeauty
+                    />
+                  )}
               </div>
             </div>
 
@@ -245,7 +266,9 @@ const GenerationItem: FC<IGenerationItemProps> = ({
                   </>
                 )}
               </div>
-              <div className='text-xs text-gray-500'>{content?.length} {t('common.unit.char')}</div>
+              <div className='text-xs text-gray-500'>
+                {contentLength} {t('common.unit.char')}
+              </div>
             </div>
 
           </div>

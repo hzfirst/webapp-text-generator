@@ -27,7 +27,11 @@ export type IResultProps = {
   controlStopResponding?: number
   onShowRes: () => void
   taskId?: number
-  onCompleted: (completionRes: string, taskId?: number, success?: boolean) => void
+  onCompleted: (
+    completionRes: any,
+    taskId?: number,
+    success?: boolean
+  ) => void
   visionConfig: VisionSettings
   completionFiles: VisionFile[]
 }
@@ -55,12 +59,15 @@ const Result: FC<IResultProps> = ({
       setResponsingFalse()
   }, [controlStopResponding])
 
-  const [completionRes, doSetCompletionRes] = useState('')
-  const completionResRef = useRef('')
-  const setCompletionRes = (res: string) => {
+  const [completionRes, doSetCompletionRes] = useState<any>('')
+
+  const completionResRef = useRef<any>('')
+
+  const setCompletionRes = (res: any) => {
     completionResRef.current = res
     doSetCompletionRes(res)
   }
+
   const getCompletionRes = () => completionResRef.current
   const [workflowProcessData, doSetWorkflowProccessData] = useState<WorkflowProcess>()
   const workflowProcessDataRef = useRef<WorkflowProcess>()
