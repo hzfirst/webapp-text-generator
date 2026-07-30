@@ -126,3 +126,57 @@ a {
   background-clip: text;
   text-fill-color: transparent;
 }
+
+:root {
+  --app-primary: #2563eb;
+  --app-primary-light: #eff6ff;
+  --app-background: #f5f7fb;
+  --app-surface: #ffffff;
+  --app-text: #172033;
+  --app-text-secondary: #667085;
+  --app-border: #e6eaf0;
+}
+
+html,
+body {
+  font-family:
+    Inter,
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
+
+body {
+  color: var(--app-text);
+  background:
+    radial-gradient(circle at 10% 0%,
+      rgba(37, 99, 235, 0.08),
+      transparent 32%),
+    var(--app-background);
+}
+
+::selection {
+  color: #ffffff;
+  background: var(--app-primary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

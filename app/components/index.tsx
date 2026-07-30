@@ -419,7 +419,7 @@ const TextGeneration = () => {
         <div className='shrink-0 flex items-center justify-between'>
           <div className='flex items-center space-x-3'>
             <div className={s.starIcon}></div>
-            <div className='text-lg text-gray-800 font-semibold'>{t('app.generation.title')}</div>
+            <div className='text-lg text-gray-800 font-semibold'>架阁录</div>
           </div>
           <div className='flex items-center space-x-2'>
             {allFailedTaskList.length > 0 && (
@@ -471,14 +471,16 @@ const TextGeneration = () => {
 
   return (
     <>
-      <div className={cn(isPC && 'flex', 'h-screen bg-gray-50')}>
+      <div className={cn(isPC && 'flex', 'h-screen bg-transparent',)}>
         {/* Left */}
-        <div className={cn(isPC ? 'w-[600px] max-w-[50%] p-8' : 'p-4', 'shrink-0 relative flex flex-col pb-10 h-full border-r border-gray-100 bg-white')}>
-          <div className='mb-6'>
+        <div
+          className={cn(isPC ? 'w-[440px] p-8' : 'p-5', 'shrink-0 relative flex flex-col h-full', 'border-r border-slate-200/80', 'bg-white/90 backdrop-blur-xl', 'shadow-[6px_0_30px_rgba(15,23,42,0.04)]',)}>
+          <div className='mb-7'>
             <div className='flex justify-between items-center'>
               <div className='flex items-center space-x-3'>
-                <div className={cn(s.appIcon, 'shrink-0')}></div>
-                <div className='text-lg text-gray-800 font-semibold'>{APP_INFO.title}</div>
+                <div className={cn(s.appIcon, 'shrink-0 rounded-xl shadow-sm')}></div>
+                <div className='text-lg text-gray-900 font-semibold'>{APP_INFO.title}</div>
+                <div className='mt-0.5 text-xs text-slate-500'>AI 智能业务知识库</div>
               </div>
               {!isPC && (
                 <Button
@@ -493,14 +495,13 @@ const TextGeneration = () => {
               )}
             </div>
             {APP_INFO.description && (
-              <div className='mt-2 text-xs text-gray-500'>{APP_INFO.description}</div>
+              <div className='mt-5 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm leading-6 text-blue-800'>{APP_INFO.description}</div>
             )}
           </div>
 
           <TabHeader
             items={[
-              { id: 'create', name: t('app.generation.tabs.create') },
-              { id: 'batch', name: t('app.generation.tabs.batch') },
+              { id: 'create', name: '智能查询', },
             ]}
             value={currTab}
             onChange={setCurrTab}

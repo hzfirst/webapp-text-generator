@@ -121,10 +121,15 @@ const GenerationItem: FC<IGenerationItemProps> = ({
   }, [isLoading])
 
   return (
-    <div className={cn(className, isTop ? `rounded-xl border ${!isError ? 'border-gray-200 bg-white' : 'border-[#FECDCA] bg-[#FEF3F2]'} ` : 'rounded-br-xl !mt-0')}
+    <div className={cn(className, isTop
+      ? `rounded-2xl border ${!isError
+        ? 'border-slate-200/80 bg-white'
+        : 'border-red-200 bg-red-50'
+      }`
+      : 'rounded-br-xl !mt-0',)}
       style={isTop
         ? {
-          boxShadow: '0px 1px 2px rgba(16, 24, 40, 0.05)',
+          boxShadow: '0 12px 40px rgba(15, 23, 42, 0.07)',
         }
         : {}}
     >
@@ -134,7 +139,7 @@ const GenerationItem: FC<IGenerationItemProps> = ({
         )
         : (
           <div
-            className={cn(!isTop && 'rounded-br-xl border-l-2 border-primary-400', 'p-4')}
+            className={cn(!isTop && 'rounded-br-xl border-l-2 border-primary-400', 'p-6')}
             style={mainStyle}
           >
             {(isTop && taskId) && (

@@ -58,8 +58,21 @@ const RunOnce: FC<IRunOnceProps> = ({
                 {item.type === 'string' && (
                   <input
                     type="text"
-                    className="block w-full p-2 text-gray-900 border border-gray-300 rounded-lg bg-gray-50 sm:text-xs focus:ring-blue-500 focus:border-blue-500 "
-                    placeholder={`${item.name}${!item.required ? `(${t('appDebug.variableTable.optional')})` : ''}`}
+                    className="
+                                  block w-full h-12 px-4
+                                  text-[15px] text-slate-900
+                                  border border-slate-200
+                                  rounded-xl bg-slate-50
+                                  outline-none
+                                  transition-all duration-200
+                                  placeholder:text-slate-400
+                                  hover:border-slate-300
+                                  focus:bg-white
+                                  focus:border-blue-500
+                                  focus:ring-4
+                                  focus:ring-blue-100
+                                "
+                    placeholder="请输入问题，例如：押金纠错明细怎么查看？"
                     value={inputs[item.key]}
                     onChange={(e) => { onInputsChange({ ...inputs, [item.key]: e.target.value }) }}
                     maxLength={item.max_length || DEFAULT_VALUE_MAX_LEN}
@@ -113,16 +126,22 @@ const RunOnce: FC<IRunOnceProps> = ({
                 onClick={onClear}
                 disabled={false}
               >
-                <span className='text-[13px]'>{t('common.operation.clear')}</span>
+                <span className='text-[13px]'>清空内容</span>
               </Button>
               <Button
                 type="primary"
-                className='!h-8 !pl-3 !pr-4'
+                className="
+                            !h-11 !px-6
+                            !rounded-xl
+                            shadow-lg shadow-blue-200/60
+                            transition-transform
+                            hover:-translate-y-0.5
+                          "
                 onClick={onSend}
                 disabled={false}
               >
                 <PlayIcon className="shrink-0 w-4 h-4 mr-1" aria-hidden="true" />
-                <span className='text-[13px]'>{t('app.generation.run')}</span>
+                <span className='text-[13px]'>立即查询</span>
               </Button>
             </div>
           </div>
