@@ -2,7 +2,7 @@
 import type { FC } from 'react'
 import React, { useEffect, useRef, useState } from 'react'
 import { useBoolean } from 'ahooks'
-import { t } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import produce from 'immer'
 import cn from 'classnames'
 import NoData from '../no-data'
@@ -10,9 +10,10 @@ import TextGenerationRes from './item'
 import Toast from '@/app/components/base/toast'
 import { sendCompletionMessage, sendWorkflowMessage, updateFeedback } from '@/service'
 import type { Feedbacktype, PromptConfig, VisionFile, VisionSettings, WorkflowProcess } from '@/types/app'
-import { NodeRunningStatus, TransferMethod, WorkflowRunningStatus } from '@/types/app'
+import { BlockEnum, NodeRunningStatus, TransferMethod, WorkflowRunningStatus } from '@/types/app'
 import Loading from '@/app/components/base/loading'
-import { sleep } from '@/utils'
+
+const REQUEST_TIMEOUT = 5 * 60 * 1000
 
 export type IResultProps = {
   isWorkflow: boolean
@@ -53,6 +54,7 @@ const Result: FC<IResultProps> = ({
   visionConfig,
   completionFiles,
 }) => {
+  const { t } = useTranslation()
   const [isResponsing, { setTrue: setResponsingTrue, setFalse: setResponsingFalse }] = useBoolean(false)
   useEffect(() => {
     if (controlStopResponding)
@@ -117,11 +119,11 @@ const Result: FC<IResultProps> = ({
     })
 
     if (hasEmptyInput) {
-      logError(t('appDebug.errorMessage.valueOfVarRequired', { key: hasEmptyInput }))
+      logError(t('app.errorMessage.valueOfVarRequired', { key: hasEmptyInput }))
       return false
     }
-    if (completionFiles.find(item => item.transfer_method === TransferMethod.local_file && !item.upload_file_id)) {
-      notify({ type: 'info', message: t('appDebug.errorMessage.waitForImgUpload') })
+    if (completionFiles.find(item => item.transfer_method === TransferMethod.local_file && !item.upload_file_id?.trim())) {
+      notify({ type: 'info', message: t('app.errorMessage.waitForImgUpload') })
       return false
     }
     return !hasEmptyInput
@@ -129,18 +131,39 @@ const Result: FC<IResultProps> = ({
 
   const handleSend = async () => {
     if (isResponsing) {
-      notify({ type: 'info', message: t('appDebug.errorMessage.waitForResponse') })
+      notify({ type: 'info', message: t('app.errorMessage.waitForResponse') })
       return false
     }
 
     if (!checkCanSend())
       return
 
-    const data: Record<string, any> = {
-      inputs,
-    }
-    if (visionConfig.enabled && completionFiles && completionFiles?.length > 0) {
-      data.files = completionFiles.map((item) => {
+    const requestFiles = completionFiles.map((item) => {
+      if (item.transfer_method === TransferMethod.local_file) {
+        return {
+          type: 'image',
+          transfer_method: TransferMethod.local_file,
+          upload_file_id: item.upload_file_id.trim(),
+          url: '',
+        }
+      }
+
+      return {
+        type: 'image',
+        transfer_method: item.transfer_method,
+        upload_file_id: '',
+        url: item.url || '',
+      }
+    })
+
+    const requestInputs = { ...inputs }
+    const data: Record<string, any> = { inputs: requestInputs }
+
+    if (isWorkflow && visionConfig.enabled)
+      requestInputs[visionConfig.variable || 'image'] = requestFiles
+
+    if (!isWorkflow && visionConfig.enabled && requestFiles.length > 0) {
+      data.files = requestFiles.map((item) => {
         if (item.transfer_method === TransferMethod.local_file) {
           return {
             ...item,
@@ -165,15 +188,22 @@ const Result: FC<IResultProps> = ({
 
     setResponsingTrue()
     let isEnd = false
-    let isTimeout = false;
-    (async () => {
-      await sleep(1000 * 60) // 1min timeout
+    let isTimeout = false
+    const timeoutId = window.setTimeout(() => {
       if (!isEnd) {
-        setResponsingFalse()
-        onCompleted(getCompletionRes(), taskId, false)
+        isEnd = true
         isTimeout = true
+        setResponsingFalse()
+        notify({ type: 'error', message: t('app.errorMessage.requestTimeout') })
+        onCompleted(getCompletionRes(), taskId, false)
       }
-    })()
+    }, REQUEST_TIMEOUT)
+
+    const finishRequest = () => {
+      window.clearTimeout(timeoutId)
+      setResponsingFalse()
+      isEnd = true
+    }
 
     if (isWorkflow) {
       sendWorkflowMessage(
@@ -184,9 +214,8 @@ const Result: FC<IResultProps> = ({
             setWorkflowProccessData({
               status: WorkflowRunningStatus.Running,
               tracing: [],
-              expand: false,
+              expand: true,
             })
-            setResponsingFalse()
           },
           onNodeStarted: ({ data }) => {
             setWorkflowProccessData(produce(getWorkflowProccessData()!, (draft) => {
@@ -213,28 +242,48 @@ const Result: FC<IResultProps> = ({
             }))
           },
           onWorkflowFinished: ({ data }) => {
-            if (isTimeout)
+            if (isTimeout || isEnd)
               return
             if (data.error) {
               notify({ type: 'error', message: data.error })
-              setResponsingFalse()
+              finishRequest()
               onCompleted(getCompletionRes(), taskId, false)
-              isEnd = true
               return
             }
             setWorkflowProccessData(produce(getWorkflowProccessData()!, (draft) => {
               draft.status = data.error ? WorkflowRunningStatus.Failed : WorkflowRunningStatus.Succeeded
             }))
-            if (!data.outputs)
-              setCompletionRes('')
-            else if (Object.keys(data.outputs).length > 1)
-              setCompletionRes(data.outputs)
-            else
-              setCompletionRes(data.outputs[Object.keys(data.outputs)[0]])
-            setResponsingFalse()
+            const endNodeOutputs = [...(getWorkflowProccessData()?.tracing || [])]
+              .reverse()
+              .find(node => node.node_type === BlockEnum.End)
+              ?.outputs
+            const hasWorkflowOutputs = data.outputs !== null
+              && data.outputs !== undefined
+              && data.outputs !== ''
+              && (typeof data.outputs !== 'object' || Object.keys(data.outputs).length > 0)
+            const outputs = hasWorkflowOutputs ? data.outputs : endNodeOutputs
+            const hasObjectOutputs = Boolean(outputs)
+              && typeof outputs === 'object'
+              && !Array.isArray(outputs)
+            const outputKeys = hasObjectOutputs
+              ? Object.keys(outputs)
+              : []
+            const completion = outputKeys.length === 1
+              ? outputs[outputKeys[0]]
+              : (outputs || '')
+
+            setCompletionRes(completion)
+            finishRequest()
             setMessageId(tempMessageId)
-            onCompleted(getCompletionRes(), taskId, true)
-            isEnd = true
+            onCompleted(completion, taskId, true)
+          },
+          onError: (message) => {
+            if (isTimeout || isEnd)
+              return
+
+            notify({ type: 'error', message })
+            finishRequest()
+            onCompleted(getCompletionRes(), taskId, false)
           },
         },
       )
@@ -247,21 +296,20 @@ const Result: FC<IResultProps> = ({
           setCompletionRes(res.join(''))
         },
         onCompleted: () => {
-          if (isTimeout)
+          if (isTimeout || isEnd)
             return
 
-          setResponsingFalse()
+          finishRequest()
           setMessageId(tempMessageId)
           onCompleted(getCompletionRes(), taskId, true)
-          isEnd = true
         },
-        onError() {
-          if (isTimeout)
+        onError(message) {
+          if (isTimeout || isEnd)
             return
 
-          setResponsingFalse()
+          notify({ type: 'error', message })
+          finishRequest()
           onCompleted(getCompletionRes(), taskId, false)
-          isEnd = true
         },
       })
     }
@@ -298,7 +346,7 @@ const Result: FC<IResultProps> = ({
   return (
     <div className={cn(isNoData && !isCallBatchAPI && 'h-full')}>
       {!isCallBatchAPI && (
-        (isResponsing && !completionRes)
+        (isResponsing && !completionRes && !workflowProcessData)
           ? (
             <div className='flex h-full w-full justify-center items-center'>
               <Loading type='area' />

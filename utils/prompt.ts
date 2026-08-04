@@ -11,12 +11,25 @@ export function replaceVarWithValues(str: string, promptVariables: PromptVariabl
   })
 }
 
-export const userInputsFormToPromptVariables = (useInputs: UserInputFormItem[] | null) => {
+export const userInputsFormToPromptVariables = (
+  useInputs: UserInputFormItem[] | null,
+) => {
   if (!useInputs)
     return []
+
   const promptVariables: PromptVariable[] = []
+
   useInputs.forEach((item: any) => {
+    /**
+     * 文件列表不作为普通文本表单变量渲染。
+     * 图片由独立的图片上传组件处理，
+     * 提交时再写入 inputs.image。
+     */
+    if (item['file-list'])
+      return
+
     const isParagraph = !!item.paragraph
+
     const [type, content] = (() => {
       if (isParagraph)
         return ['paragraph', item.paragraph]
@@ -30,8 +43,16 @@ export const userInputsFormToPromptVariables = (useInputs: UserInputFormItem[] |
       if (item.file)
         return ['file', item.file]
 
-      return ['select', item.select]
+      if (item.select)
+        return ['select', item.select]
+
+      return ['', null]
     })()
+
+    // 遇到未知类型时直接跳过，避免页面500
+    if (!content)
+      return
+
     if (type === 'string' || type === 'paragraph') {
       promptVariables.push({
         key: content.variable,
@@ -51,15 +72,25 @@ export const userInputsFormToPromptVariables = (useInputs: UserInputFormItem[] |
         options: [],
       })
     }
-    else {
+    else if (type === 'file') {
+      promptVariables.push({
+        key: content.variable,
+        name: content.label,
+        required: content.required,
+        type: 'file',
+        options: [],
+      })
+    }
+    else if (type === 'select') {
       promptVariables.push({
         key: content.variable,
         name: content.label,
         required: content.required,
         type: 'select',
-        options: content.options,
+        options: content.options || [],
       })
     }
   })
+
   return promptVariables
 }

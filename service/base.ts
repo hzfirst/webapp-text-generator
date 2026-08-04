@@ -126,6 +126,7 @@ const handleStream = (
   response: Response,
   onData: IOnData,
   onCompleted?: IOnCompleted,
+  onError?: IOnError,
   onWorkflowStarted?: IOnWorkflowStarted,
   onWorkflowFinished?: IOnWorkflowFinished,
   onNodeStarted?: IOnNodeStarted,
@@ -179,6 +180,9 @@ const handleStream = (
           }
           else if (bufferObj.event === 'node_finished') {
             onNodeFinished?.(bufferObj as NodeFinishedResponse)
+          }
+          else if (bufferObj.event === 'error') {
+            onError?.(bufferObj.message || bufferObj.data?.message || 'Server Error')
           }
         })
         buffer = lines[lines.length - 1]
@@ -300,10 +304,25 @@ export const upload = (fetchOptions: any): Promise<any> => {
     xhr.withCredentials = true
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
-        if (xhr.status === 200)
-          resolve({ id: xhr.response })
-        else
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = typeof xhr.response === 'string'
+              ? JSON.parse(xhr.response)
+              : xhr.response
+            const id = `${response?.id || ''}`.trim()
+
+            if (!id)
+              throw new Error('Upload response does not contain a file ID')
+
+            resolve({ id })
+          }
+          catch (error) {
+            reject(error)
+          }
+        }
+        else {
           reject(xhr)
+        }
       }
     }
     xhr.upload.onprogress = options.onprogress
@@ -352,7 +371,7 @@ export const ssePost = (
           return
         }
         onData?.(str, isFirstMessage, moreInfo)
-      }, onCompleted, onWorkflowStarted, onWorkflowFinished, onNodeStarted, onNodeFinished)
+      }, onCompleted, onError, onWorkflowStarted, onWorkflowFinished, onNodeStarted, onNodeFinished)
     }).catch((e) => {
       Toast.notify({ type: 'error', message: e })
       onError?.(e)

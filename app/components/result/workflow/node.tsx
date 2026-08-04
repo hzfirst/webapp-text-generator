@@ -1,6 +1,7 @@
 'use client'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import cn from 'classnames'
 import BlockIcon from './block-icon'
 import { AlertCircle, AlertTriangle } from '@/app/components/base/icons/line/alertsAndFeedback'
@@ -13,7 +14,9 @@ type Props = {
 }
 
 const NodePanel: FC<Props> = ({ nodeInfo, hideInfo = false }) => {
+  const { t } = useTranslation()
   const [collapseState, setCollapseState] = useState<boolean>(true)
+  const nodeTitle = nodeInfo.title || nodeInfo.node_type
 
   const getTime = (time: number) => {
     if (time < 1)
@@ -52,7 +55,7 @@ const NodePanel: FC<Props> = ({ nodeInfo, hideInfo = false }) => {
           <div className={cn(
             'grow text-gray-700 text-[13px] leading-[16px] font-semibold truncate',
             hideInfo && '!text-xs',
-          )} title={nodeInfo.title}>{nodeInfo.title}</div>
+          )} title={nodeTitle}>{nodeTitle}</div>
           {nodeInfo.status !== 'running' && !hideInfo && (
             <div className='shrink-0 text-gray-500 text-xs leading-[18px]'>{`${getTime(nodeInfo.elapsed_time || 0)} · ${getTokenCount(nodeInfo.execution_metadata?.total_tokens || 0)} tokens`}</div>
           )}
@@ -68,7 +71,7 @@ const NodePanel: FC<Props> = ({ nodeInfo, hideInfo = false }) => {
           {nodeInfo.status === 'running' && (
             <div className='shrink-0 flex items-center text-primary-600 text-[13px] leading-[16px] font-medium'>
               <Loading02 className='mr-1 w-3.5 h-3.5 animate-spin' />
-              <span>Running</span>
+              <span>{t('app.workflowProcess.nodeRunning')}</span>
             </div>
           )}
         </div>

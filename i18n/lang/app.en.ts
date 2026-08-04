@@ -5,6 +5,14 @@ const translation = {
     appUnkonwError: 'App is unavailable',
     optional: 'Optional',
   },
+  workflowProcess: {
+    title: 'Execution progress',
+    preparing: 'Preparing workflow...',
+    running: 'Running: {{node}}',
+    completed: 'Completed {{count}} steps',
+    failed: 'Execution did not complete',
+    nodeRunning: 'Running',
+  },
   generation: {
     tabs: {
       create: 'Run Once',
@@ -49,6 +57,7 @@ const translation = {
     queryRequired: 'Request text is required.',
     waitForResponse: 'Please wait for the response to the previous message to complete.',
     waitForImgUpload: 'Please wait for the image to upload',
+    requestTimeout: 'Request timed out. Please try again later.',
   },
 }
 

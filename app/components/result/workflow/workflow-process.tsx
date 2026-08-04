@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import cn from 'classnames'
 import NodePanel from './node'
 import type { WorkflowProcess } from '@/types/app'
@@ -24,10 +25,25 @@ const WorkflowProcessItem = ({
   expand = false,
   hideInfo = false,
 }: WorkflowProcessProps) => {
+  const { t } = useTranslation()
   const [collapse, setCollapse] = useState(!expand)
   const running = data.status === WorkflowRunningStatus.Running
   const succeeded = data.status === WorkflowRunningStatus.Succeeded
   const failed = data.status === WorkflowRunningStatus.Failed || data.status === WorkflowRunningStatus.Stopped
+  const runningNode = [...data.tracing].reverse().find(node => node.status === 'running')
+  const completedCount = data.tracing.filter(node => node.status === 'succeeded').length
+  const statusText = (() => {
+    if (runningNode) {
+      return t('app.workflowProcess.running', {
+        node: runningNode.title || runningNode.node_type,
+      })
+    }
+    if (running)
+      return t('app.workflowProcess.preparing')
+    if (succeeded)
+      return t('app.workflowProcess.completed', { count: completedCount })
+    return t('app.workflowProcess.failed')
+  })()
 
   const background = useMemo(() => {
     if (running && !collapse)
@@ -78,8 +94,11 @@ const WorkflowProcessItem = ({
             <AlertCircle className='shrink-0 mr-1 w-3 h-3 text-[#F04438]' />
           )
         }
-        <div className='grow text-xs font-medium text-gray-700 leading-[18px]'>Workflow Process</div>
-        <ChevronRight className={`'ml-1 w-3 h-3 text-gray-500' ${collapse ? '' : 'rotate-90'}`} />
+        <div className='grow min-w-0 flex items-center gap-2 leading-[18px]'>
+          <div className='shrink-0 text-xs font-medium text-gray-700'>{t('app.workflowProcess.title')}</div>
+          <div className='truncate text-[11px] font-normal text-gray-500'>{statusText}</div>
+        </div>
+        <ChevronRight className={cn('ml-1 w-3 h-3 text-gray-500 transition-transform', !collapse && 'rotate-90')} />
       </div>
       {
         !collapse && (

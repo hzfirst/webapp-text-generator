@@ -348,14 +348,38 @@ const TextGeneration = () => {
 
         const { user_input_form, file_upload, system_parameters }: any = await fetchAppParams()
         const prompt_variables = userInputsFormToPromptVariables(user_input_form)
+        const fileListConfig = user_input_form
+          ?.find((item: any) => item['file-list'])
+          ?.['file-list']
 
         setPromptConfig({
           prompt_template: '',
           prompt_variables,
         } as PromptConfig)
         setVisionConfig({
-          ...file_upload?.image,
-          image_file_size_limit: system_parameters?.image_file_size_limit || 0,
+          // 新工作流存在 file-list 时也要开启上传区域
+          enabled:
+            Boolean(fileListConfig)
+            || Boolean(file_upload?.image?.enabled),
+
+          // 工作流文件变量名来自 Dify 配置，不能固定写死。
+          variable: fileListConfig?.variable || 'image',
+
+          // 你的Dify配置为 max_length: 1
+          number_limits:
+            fileListConfig?.max_length
+            || file_upload?.image?.number_limits
+            || 1,
+
+          detail: Resolution.high,
+
+          transfer_methods:
+            fileListConfig?.allowed_file_upload_methods
+            || file_upload?.image?.transfer_methods
+            || [TransferMethod.local_file],
+
+          image_file_size_limit:
+            system_parameters?.image_file_size_limit || 10,
         })
       }
       catch (e: any) {

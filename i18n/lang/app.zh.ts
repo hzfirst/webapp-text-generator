@@ -5,6 +5,14 @@ const translation = {
     appUnkonwError: '应用不可用',
     optional: '可选',
   },
+  workflowProcess: {
+    title: '执行进度',
+    preparing: '正在准备工作流…',
+    running: '正在执行：{{node}}',
+    completed: '执行完成，共 {{count}} 个步骤',
+    failed: '执行未完成',
+    nodeRunning: '执行中',
+  },
   generation: {
     tabs: {
       create: '运行一次',
@@ -46,6 +54,7 @@ const translation = {
     queryRequired: '主要文本必填',
     waitForResponse: '请等待上条信息响应完成',
     waitForImgUpload: '请等待图片上传完成',
+    requestTimeout: '请求超时，请稍后重试',
   },
 }
 

@@ -19,7 +19,8 @@ export const imageUpload: ImageUpload = ({
   formData.append('file', file)
   const onProgress = (e: ProgressEvent) => {
     if (e.lengthComputable) {
-      const percent = Math.floor(e.loaded / e.total * 100)
+      // 100% means the server has returned a usable upload_file_id.
+      const percent = Math.min(99, Math.floor(e.loaded / e.total * 100))
       onProgressCallback(percent)
     }
   }
