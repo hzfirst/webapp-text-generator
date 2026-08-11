@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import cn from 'classnames'
 import { useBoolean, useClickAway } from 'ahooks'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ChatBubbleLeftRightIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import RunOnce from './run-once'
 import RunBatch from './run-batch'
 import ResDownload from './run-batch/res-download'
@@ -22,6 +22,7 @@ import Loading from '@/app/components/base/loading'
 import AppUnavailable from '@/app/components/app-unavailable'
 import { APP_ID, APP_INFO, DEFAULT_VALUE_MAX_LEN, IS_WORKFLOW } from '@/config'
 import { userInputsFormToPromptVariables } from '@/utils/prompt'
+import { conversationToInputs, parseRichAnswer } from '@/app/components/result/rich-answer-utils'
 
 const GROUP_SIZE = 5 // to avoid RPM(Request per minute) limit. The group task finished then the next group.
 enum TaskStatus {
@@ -62,6 +63,7 @@ const TextGeneration = () => {
   const [isUnknwonReason, setIsUnknwonReason] = useState<boolean>(false)
 
   const [inputs, setInputs] = useState<Record<string, any>>({})
+  const [submittedInputs, setSubmittedInputs] = useState<Record<string, any>>({})
   const [promptConfig, setPromptConfig] = useState<PromptConfig | null>(null)
   const [isResponsing, { setTrue: setResponsingTrue, setFalse: setResponsingFalse }] = useBoolean(false)
   const [completionRes, setCompletionRes] = useState('')
@@ -114,13 +116,43 @@ const TextGeneration = () => {
     transfer_methods: [TransferMethod.local_file],
   })
   const [completionFiles, setCompletionFiles] = useState<VisionFile[]>([])
-  const handleSend = async () => {
+  const [submittedFiles, setSubmittedFiles] = useState<VisionFile[]>([])
+  const [composerResetKey, setComposerResetKey] = useState(0)
+  const [conversationResetKey, setConversationResetKey] = useState(0)
+  const [isChatResponding, setIsChatResponding] = useState(false)
+
+  const submitChatRequest = (nextInputs: Record<string, any>, files: VisionFile[]) => {
+    if (isChatResponding)
+      return
+
+    const question = `${nextInputs.cw || ''}`.trim()
+    const hasImage = files.some(file => Boolean(file.url || file.upload_file_id))
+    if (!question && !hasImage) {
+      notify({ type: 'info', message: '请输入问题或添加一张系统截图' })
+      return
+    }
+
+    if (files.some(file => file.transfer_method === TransferMethod.local_file && !file.upload_file_id?.trim())) {
+      notify({ type: 'info', message: t('app.errorMessage.waitForImgUpload') })
+      return
+    }
+
+    setSubmittedInputs({ ...nextInputs })
+    setSubmittedFiles([...files])
+    setIsChatResponding(true)
     setIsCallBatchAPI(false)
     setControlSend(Date.now())
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
     setAllTaskList([]) // clear batch task running status
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    showResSidebar()
+    setInputs(current => ({ ...current, cw: '' }))
+    setCompletionFiles([])
+    setComposerResetKey(current => current + 1)
+  }
+
+  const handleSend = () => submitChatRequest(inputs, completionFiles)
+
+  const handleSuggestedQuestion = (question: string) => {
+    submitChatRequest({ ...inputs, cw: question }, [])
   }
 
   const [controlRetry, setControlRetry] = useState(0)
@@ -299,7 +331,21 @@ const TextGeneration = () => {
     showResSidebar()
   }
 
-  const handleCompleted = (completionRes: string, taskId?: number, isSuccess?: boolean) => {
+  const handleCompleted = (completionRes: any, taskId?: number, isSuccess?: boolean) => {
+    if (!taskId) {
+      if (!isSuccess)
+        return
+
+      const conversation = parseRichAnswer(completionRes)?.conversation
+      if (conversation) {
+        setInputs(current => ({
+          ...current,
+          ...conversationToInputs(conversation),
+        }))
+      }
+      return
+    }
+
     const allTasklistLatest = getLatestTaskList()
     const batchCompletionResLatest = getBatchCompletionRes()
     const pendingTaskList = allTasklistLatest.filter(task => task.status === TaskStatus.pending)
@@ -356,6 +402,10 @@ const TextGeneration = () => {
           prompt_template: '',
           prompt_variables,
         } as PromptConfig)
+        setInputs(current => prompt_variables.reduce((result: Record<string, any>, variable: any) => ({
+          ...result,
+          [variable.key]: current[variable.key] ?? variable.default ?? '',
+        }), { ...current }))
         setVisionConfig({
           // 新工作流存在 file-list 时也要开启上传区域
           enabled:
@@ -407,13 +457,14 @@ const TextGeneration = () => {
 
   const renderRes = (task?: Task) => (
     <Result
+      key={isCallBatchAPI ? `batch-${task?.id}` : `chat-${conversationResetKey}`}
       isWorkflow={IS_WORKFLOW}
       isCallBatchAPI={isCallBatchAPI}
       isPC={isPC}
       isMobile={isMobile}
       isError={task?.status === TaskStatus.failed}
       promptConfig={promptConfig}
-      inputs={isCallBatchAPI ? (task as Task).params.inputs : inputs}
+      inputs={isCallBatchAPI ? (task as Task).params.inputs : submittedInputs}
       controlSend={controlSend}
       controlRetry={task?.status === TaskStatus.failed ? controlRetry : 0}
       controlStopResponding={controlStopResponding}
@@ -421,12 +472,35 @@ const TextGeneration = () => {
       taskId={task?.id}
       onCompleted={handleCompleted}
       visionConfig={visionConfig}
-      completionFiles={completionFiles}
+      completionFiles={isCallBatchAPI ? completionFiles : submittedFiles}
+      onSuggestedQuestion={handleSuggestedQuestion}
+      onRespondingChange={!isCallBatchAPI ? setIsChatResponding : undefined}
     />
   )
 
   const renderBatchRes = () => {
     return (showTaskList.map(task => renderRes(task)))
+  }
+
+  const handleNewConversation = () => {
+    if (isChatResponding)
+      return
+
+    const resetInputs = (promptConfig?.prompt_variables || []).reduce((result: Record<string, any>, variable) => ({
+      ...result,
+      [variable.key]: variable.default ?? '',
+    }), {})
+    setInputs(resetInputs)
+    setSubmittedInputs({})
+    setSubmittedFiles([])
+    setCompletionFiles([])
+    setControlSend(0)
+    setControlRetry(0)
+    setCompletionRes('')
+    setMessageId(null)
+    setFeedback({ rating: null })
+    setComposerResetKey(current => current + 1)
+    setConversationResetKey(current => current + 1)
   }
 
   const renderResWrap = (
@@ -492,6 +566,95 @@ const TextGeneration = () => {
 
   if (!APP_INFO || !promptConfig)
     return <Loading type='app' />
+
+  if (!isCallBatchAPI) {
+    return (
+      <div className='flex h-screen min-w-0 bg-slate-50'>
+        <aside className='hidden w-[280px] shrink-0 flex-col border-r border-slate-200 bg-white px-5 py-6 md:flex'>
+          <div className='flex items-center gap-3'>
+            <div className={cn(s.appIcon, 'shrink-0 rounded-lg shadow-sm')} />
+            <div className='min-w-0'>
+              <div className='truncate text-base font-semibold text-slate-900'>{APP_INFO.title}</div>
+              <div className='mt-0.5 text-xs text-slate-500'>AI 智能客服</div>
+            </div>
+          </div>
+
+          <button
+            type='button'
+            className='mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400'
+            disabled={isChatResponding}
+            onClick={handleNewConversation}
+          >
+            <ArrowPathIcon className='h-4 w-4' aria-hidden='true' />
+            新建会话
+          </button>
+
+          <div className='mt-6 text-sm leading-6 text-slate-600'>
+            {APP_INFO.description}
+          </div>
+
+          {inputs.active_topic && (
+            <div className='mt-6 border-t border-slate-100 pt-5'>
+              <div className='text-xs font-medium text-slate-400'>当前主题</div>
+              <div className='mt-2 flex items-center gap-2 text-sm text-slate-700'>
+                <ChatBubbleLeftRightIcon className='h-4 w-4 shrink-0 text-blue-600' aria-hidden='true' />
+                <span className='break-words'>{inputs.active_topic}</span>
+              </div>
+            </div>
+          )}
+
+          <div className='mt-auto border-t border-slate-100 pt-4 text-xs text-slate-400'>
+            © {APP_INFO.copyright || APP_INFO.title} {(new Date()).getFullYear()}
+          </div>
+        </aside>
+
+        <main className='flex min-w-0 flex-1 flex-col'>
+          <header className='flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6'>
+            <div className='flex items-center gap-3'>
+              <div className='flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white md:hidden'>
+                <SparklesIcon className='h-5 w-5' aria-hidden='true' />
+              </div>
+              <div>
+                <div className='text-sm font-semibold text-slate-900'>智能客服</div>
+                <div className='mt-0.5 flex items-center gap-1.5 text-xs text-slate-500'>
+                  <span className='h-1.5 w-1.5 rounded-full bg-emerald-500' />
+                  在线
+                </div>
+              </div>
+            </div>
+
+            <button
+              type='button'
+              className='flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300 md:hidden'
+              disabled={isChatResponding}
+              onClick={handleNewConversation}
+              title='新建会话'
+              aria-label='新建会话'
+            >
+              <ArrowPathIcon className='h-5 w-5' aria-hidden='true' />
+            </button>
+          </header>
+
+          <div className='min-h-0 flex-1'>
+            {renderRes()}
+          </div>
+
+          <div className='shrink-0 border-t border-slate-200 bg-white px-4 pb-4 pt-3 sm:px-6'>
+            <RunOnce
+              inputs={inputs}
+              onInputsChange={setInputs}
+              promptConfig={promptConfig}
+              onSend={handleSend}
+              visionConfig={visionConfig}
+              onVisionFilesChange={setCompletionFiles}
+              resetKey={composerResetKey}
+              disabled={isChatResponding}
+            />
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <>

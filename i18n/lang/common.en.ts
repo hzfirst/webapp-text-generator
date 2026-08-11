@@ -35,6 +35,7 @@ const translation = {
     pasteImageLinkInputPlaceholder: 'Paste image link here',
     pasteImageLinkInvalid: 'Invalid image link',
     imageUpload: 'Image Upload',
+    pasteImageHint: 'You can paste a screenshot directly (Ctrl+V)',
   },
 }
 
