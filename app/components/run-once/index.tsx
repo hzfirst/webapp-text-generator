@@ -1,12 +1,7 @@
 import type { FC } from 'react'
 import React from 'react'
-import { useTranslation } from 'react-i18next'
-import {
-  PlayIcon,
-} from '@heroicons/react/24/solid'
-import Select from '@/app/components/base/select'
+import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
 import type { PromptConfig, VisionFile, VisionSettings } from '@/types/app'
-import Button from '@/app/components/base/button'
 import { DEFAULT_VALUE_MAX_LEN } from '@/config'
 import TextGenerationImageUploader from '@/app/components/base/image-uploader/text-generation-image-uploader'
 
@@ -17,7 +12,18 @@ export type IRunOnceProps = {
   onSend: () => void
   visionConfig: VisionSettings
   onVisionFilesChange: (files: VisionFile[]) => void
+  resetKey?: number
+  disabled?: boolean
 }
+
+const SYSTEM_CONTEXT_KEYS = new Set([
+  'active_topic',
+  'context_summary',
+  'waiting_for',
+  'candidate_topics',
+  'last_resolved_question',
+])
+
 const RunOnce: FC<IRunOnceProps> = ({
   promptConfig,
   inputs,
@@ -25,129 +31,78 @@ const RunOnce: FC<IRunOnceProps> = ({
   onSend,
   visionConfig,
   onVisionFilesChange,
+  resetKey = 0,
+  disabled = false,
 }) => {
-  const { t } = useTranslation()
+  const visibleVariables = promptConfig.prompt_variables.filter(variable => !SYSTEM_CONTEXT_KEYS.has(variable.key) && variable.type !== 'file')
+  const questionVariable = visibleVariables.find(variable => variable.key === 'cw') || visibleVariables[0]
+  const questionValue = questionVariable ? `${inputs[questionVariable.key] || ''}` : ''
 
-  const onClear = () => {
-    const newInputs: Record<string, any> = {}
-    promptConfig.prompt_variables.forEach((item) => {
-      newInputs[item.key] = ''
-    })
-    onInputsChange(newInputs)
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!disabled)
+      onSend()
+  }
+
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing)
+      return
+
+    if (event.shiftKey)
+      return
+
+    event.preventDefault()
+    if (!disabled)
+      onSend()
   }
 
   return (
-    <div className="">
-      <section>
-        {/* input form */}
-        <form>
-          {promptConfig.prompt_variables.map(item => (
-            <div className='w-full mt-4' key={item.key}>
-              <label className='text-gray-900 text-sm font-medium'>{item.name}</label>
-              <div className='mt-2'>
-                {item.type === 'select' && (
-                  <Select
-                    className='w-full'
-                    defaultValue={inputs[item.key]}
-                    onSelect={(i) => { onInputsChange({ ...inputs, [item.key]: i.value }) }}
-                    items={(item.options || []).map(i => ({ name: i, value: i }))}
-                    allowSearch={false}
-                    bgClassName='bg-gray-50'
-                  />
-                )}
-                {item.type === 'string' && (
-                  <input
-                    type="text"
-                    className="
-                                  block w-full h-12 px-4
-                                  text-[15px] text-slate-900
-                                  border border-slate-200
-                                  rounded-xl bg-slate-50
-                                  outline-none
-                                  transition-all duration-200
-                                  placeholder:text-slate-400
-                                  hover:border-slate-300
-                                  focus:bg-white
-                                  focus:border-blue-500
-                                  focus:ring-4
-                                  focus:ring-blue-100
-                                "
-                    placeholder="请输入问题，例如：押金纠错明细怎么查看？"
-                    value={inputs[item.key]}
-                    onChange={(e) => { onInputsChange({ ...inputs, [item.key]: e.target.value }) }}
-                    maxLength={item.max_length || DEFAULT_VALUE_MAX_LEN}
-                  />
-                )}
-                {item.type === 'paragraph' && (
-                  <textarea
-                    className="block w-full h-[104px] p-2 text-gray-900 border border-gray-300 rounded-lg bg-gray-50 sm:text-xs focus:ring-blue-500 focus:border-blue-500 "
-                    placeholder={`${item.name}${!item.required ? `(${t('appDebug.variableTable.optional')})` : ''}`}
-                    value={inputs[item.key]}
-                    onChange={(e) => { onInputsChange({ ...inputs, [item.key]: e.target.value }) }}
-                  />
-                )}
-                {item.type === 'number' && (
-                  <input
-                    type="number"
-                    className="block w-full p-2 text-gray-900 border border-gray-300 rounded-lg bg-gray-50 sm:text-xs focus:ring-blue-500 focus:border-blue-500 "
-                    placeholder={`${item.name}${!item.required ? `(${t('appDebug.variableTable.optional')})` : ''}`}
-                    value={inputs[item.key]}
-                    onChange={(e) => { onInputsChange({ ...inputs, [item.key]: e.target.value }) }}
-                  />
-                )}
-              </div>
-            </div>
-          ))}
-          {
-            visionConfig?.enabled && (
-              <div className="w-full mt-4">
-                <div className="text-gray-900 text-sm font-medium">{t('common.imageUploader.imageUpload')}</div>
-                <div className='mt-2'>
-                  <TextGenerationImageUploader
-                    settings={visionConfig}
-                    onFilesChange={files => onVisionFilesChange(files.filter(file => file.progress !== -1).map(fileItem => ({
-                      type: 'image',
-                      transfer_method: fileItem.type,
-                      url: fileItem.url,
-                      upload_file_id: fileItem.fileId,
-                    })))}
-                  />
-                </div>
-              </div>
-            )
-          }
-          {promptConfig.prompt_variables.length > 0 && (
-            <div className='mt-4 h-[1px] bg-gray-100'></div>
-          )}
-          <div className='w-full mt-4'>
-            <div className="flex items-center justify-between">
-              <Button
-                className='!h-8 !p-3'
-                onClick={onClear}
-                disabled={false}
-              >
-                <span className='text-[13px]'>清空内容</span>
-              </Button>
-              <Button
-                type="primary"
-                className="
-                            !h-11 !px-6
-                            !rounded-xl
-                            shadow-lg shadow-blue-200/60
-                            transition-transform
-                            hover:-translate-y-0.5
-                          "
-                onClick={onSend}
-                disabled={false}
-              >
-                <PlayIcon className="shrink-0 w-4 h-4 mr-1" aria-hidden="true" />
-                <span className='text-[13px]'>立即查询</span>
-              </Button>
-            </div>
+    <form onSubmit={handleSubmit} className='mx-auto w-full max-w-[900px]'>
+      <div className='overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.08)] focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100'>
+        {visionConfig?.enabled && (
+          <div className='border-b border-slate-100 bg-slate-50/70 px-3 py-2'>
+            <TextGenerationImageUploader
+              key={resetKey}
+              settings={visionConfig}
+              onFilesChange={files => onVisionFilesChange(files.filter(file => file.progress !== -1).map(fileItem => ({
+                type: 'image',
+                transfer_method: fileItem.type,
+                url: fileItem.url,
+                upload_file_id: fileItem.fileId,
+              })))}
+            />
           </div>
-        </form>
-      </section>
-    </div>
+        )}
+
+        <div className='flex items-end gap-2 p-2'>
+          <textarea
+            rows={2}
+            className='max-h-36 min-h-[52px] grow resize-none bg-transparent px-2 py-2 text-[15px] leading-6 text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400'
+            placeholder='请输入问题，或粘贴一张系统截图...'
+            value={questionValue}
+            disabled={disabled || !questionVariable}
+            onChange={(event) => {
+              if (questionVariable)
+                onInputsChange({ ...inputs, [questionVariable.key]: event.target.value })
+            }}
+            onKeyDown={handleInputKeyDown}
+            maxLength={questionVariable?.max_length || DEFAULT_VALUE_MAX_LEN}
+            aria-label={questionVariable?.name || '当前用户问题'}
+          />
+
+          <button
+            type='submit'
+            className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300'
+            disabled={disabled}
+            title={disabled ? '正在生成回答' : '发送'}
+            aria-label={disabled ? '正在生成回答' : '发送'}
+          >
+            <PaperAirplaneIcon className='h-5 w-5' aria-hidden='true' />
+          </button>
+        </div>
+      </div>
+      <div className='mt-2 text-center text-xs text-slate-400'>Enter 发送，Shift+Enter 换行</div>
+    </form>
   )
 }
 export default React.memo(RunOnce)

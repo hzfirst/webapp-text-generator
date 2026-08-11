@@ -17,9 +17,8 @@ import RefreshCcw01 from '@/app/components/base/icons/line/refresh-ccw-01'
 import CodeEditor from '@/app/components/result/workflow/code-editor'
 import WorkflowProcessItem from '@/app/components/result/workflow/workflow-process'
 import { CodeLanguage } from '@/types/app'
-import RichAnswer, {
-  parseRichAnswer,
-} from '@/app/components/result/rich-answer'
+import RichAnswer from '@/app/components/result/rich-answer'
+import { getAnswerCopyText, parseRichAnswer } from '@/app/components/result/rich-answer-utils'
 
 export type IGenerationItemProps = {
   isWorkflow?: boolean
@@ -78,10 +77,8 @@ const GenerationItem: FC<IGenerationItemProps> = ({
   const isTop = depth === 1
 
   const richAnswer = parseRichAnswer(content)
-
-  const contentLength = typeof content === 'string'
-    ? content.length
-    : JSON.stringify(content ?? {}).length
+  const copyContent = getAnswerCopyText(content, richAnswer)
+  const contentLength = copyContent.length
 
   const [completionRes, setCompletionRes] = useState('')
   const [childMessageId, setChildMessageId] = useState<string | null>(null)
@@ -198,10 +195,7 @@ const GenerationItem: FC<IGenerationItemProps> = ({
                   isDisabled={isError || !messageId}
                   className={cn(isMobile && '!px-1.5', 'space-x-1')}
                   onClick={() => {
-                    if (typeof content === 'string')
-                      copy(content)
-                    else
-                      copy(JSON.stringify(content))
+                    copy(copyContent)
                     Toast.notify({ type: 'success', message: t('common.actionMsg.copySuccessfully') })
                   }}>
                   <Clipboard className='w-3.5 h-3.5' />

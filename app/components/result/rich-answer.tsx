@@ -1,73 +1,8 @@
 'use client'
 
 import React from 'react'
+import type { RichAnswerData } from './rich-answer-utils'
 import { Markdown } from '@/app/components/base/markdown'
-
-export type MediaItem = {
-  source_id?: string
-  title?: string
-  url?: string
-  poster_url?: string
-  description?: string
-  step?: string
-  step_number?: string | number
-  instruction?: string
-}
-
-export type RichAnswerData = {
-  status?: string
-  answer?: string
-  image_urls?: MediaItem[]
-  video_urls?: MediaItem[]
-}
-
-/**
- * 兼容：
- * 1. 直接返回对象
- * 2. 返回 JSON 字符串
- * 3. 包在 result 字段中
- * 4. 包在 structured_output 字段中
- */
-export function parseRichAnswer(value: unknown): RichAnswerData | null {
-  if (!value)
-    return null
-
-  if (typeof value === 'string') {
-    const text = value.trim()
-    if (!text.startsWith('{'))
-      return null
-
-    try {
-      return parseRichAnswer(JSON.parse(text))
-    }
-    catch {
-      return null
-    }
-  }
-
-  if (typeof value !== 'object' || Array.isArray(value))
-    return null
-
-  const data = value as Record<string, unknown>
-  if (data.result)
-    return parseRichAnswer(data.result)
-  if (data.structured_output)
-    return parseRichAnswer(data.structured_output)
-
-  const hasRichContent = typeof data.answer === 'string'
-    || Array.isArray(data.image_urls)
-    || Array.isArray(data.video_urls)
-
-  if (!hasRichContent)
-    return null
-
-  return {
-    status: typeof data.status === 'string' ? data.status : '',
-    answer: typeof data.answer === 'string' ? data.answer : '',
-    image_urls: Array.isArray(data.image_urls) ? data.image_urls as MediaItem[] : [],
-    video_urls: Array.isArray(data.video_urls) ? data.video_urls as MediaItem[] : [],
-  }
-}
 
 function safeUrl(value?: string): string {
   if (!value)
@@ -99,15 +34,34 @@ function extractNumberedSteps(answer?: string): string[] {
     .filter(Boolean)
 }
 
-const RichAnswer = ({ data }: { data: RichAnswerData }) => {
+type RichAnswerProps = {
+  data: RichAnswerData
+  compact?: boolean
+  suggestionsDisabled?: boolean
+  onSuggestedQuestion?: (question: string) => void
+}
+
+const RichAnswer = ({
+  data,
+  compact = false,
+  suggestionsDisabled = false,
+  onSuggestedQuestion,
+}: RichAnswerProps) => {
   const images = (data.image_urls || []).filter(item => Boolean(safeUrl(item.url)))
   const videos = data.video_urls || []
+  const suggestedQuestions = data.suggested_questions || []
   const answerSteps = extractNumberedSteps(data.answer)
   const canPairAnswerSteps = answerSteps.length === images.length
 
   return (
-    <div className='space-y-8'>
-      {data.answer && (
+    <div className={compact ? 'space-y-5' : 'space-y-8'}>
+      {data.answer && compact && (
+        <div className='text-[15px] leading-7 text-slate-700'>
+          <Markdown content={data.answer} />
+        </div>
+      )}
+
+      {data.answer && !compact && (
         <section>
           <div className='mb-3 flex items-center gap-2'>
             <span className='h-5 w-1 rounded-full bg-blue-600' />
@@ -116,6 +70,25 @@ const RichAnswer = ({ data }: { data: RichAnswerData }) => {
 
           <div className='rounded-lg border border-slate-100 bg-slate-50 px-5 py-4 text-[15px] leading-7 text-slate-700'>
             <Markdown content={data.answer} />
+          </div>
+        </section>
+      )}
+
+      {suggestedQuestions.length > 0 && (
+        <section>
+          <div className='mb-2 text-xs font-medium text-slate-500'>请选择您想继续了解的内容</div>
+          <div className='flex flex-col items-start gap-2'>
+            {suggestedQuestions.map(question => (
+              <button
+                key={question}
+                type='button'
+                className='max-w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-left text-sm leading-5 text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400'
+                disabled={suggestionsDisabled || !onSuggestedQuestion}
+                onClick={() => onSuggestedQuestion?.(question)}
+              >
+                {question}
+              </button>
+            ))}
           </div>
         </section>
       )}

@@ -3,9 +3,8 @@
 import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { imageUpload } from './utils'
+import { readAndUploadImage } from './utils'
 import type { ImageFile } from '@/types/app'
-import { TransferMethod } from '@/types/app'
 import Toast from '@/app/components/base/toast'
 
 type UploaderProps = {
@@ -31,49 +30,14 @@ const Uploader: FC<UploaderProps> = ({
     if (!file)
       return
 
-    if (limit && file.size > limit * 1024 * 1024) {
-      notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerLimit', { size: limit }) })
-      return
-    }
-
-    const reader = new FileReader()
-    reader.addEventListener(
-      'load',
-      () => {
-        const imageFile = {
-          type: TransferMethod.local_file,
-          _id: `${Date.now()}`,
-          fileId: '',
-          file,
-          url: reader.result as string,
-          base64Url: reader.result as string,
-          progress: 0,
-        }
-        onUpload(imageFile)
-        imageUpload({
-          file: imageFile.file,
-          onProgressCallback: (progress) => {
-            onUpload({ ...imageFile, progress })
-          },
-          onSuccessCallback: (res) => {
-            onUpload({ ...imageFile, fileId: res.id, progress: 100 })
-          },
-          onErrorCallback: () => {
-            notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerUploadError') })
-            onUpload({ ...imageFile, progress: -1 })
-          },
-        })
-      },
-      false,
-    )
-    reader.addEventListener(
-      'error',
-      () => {
-        notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerReadError') })
-      },
-      false,
-    )
-    reader.readAsDataURL(file)
+    readAndUploadImage({
+      file,
+      limit,
+      onUpload,
+      onLimitError: () => notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerLimit', { size: limit }) }),
+      onReadError: () => notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerReadError') }),
+      onUploadError: () => notify({ type: 'error', message: t('common.imageUploader.uploadFromComputerUploadError') }),
+    })
   }
 
   return (

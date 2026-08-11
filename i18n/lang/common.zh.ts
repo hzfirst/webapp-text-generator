@@ -35,6 +35,7 @@ const translation = {
     pasteImageLinkInputPlaceholder: '将图像链接粘贴到此处',
     pasteImageLinkInvalid: '图片链接无效',
     imageUpload: '图片上传',
+    pasteImageHint: '支持直接粘贴截图（Ctrl+V）',
   },
 }
 
