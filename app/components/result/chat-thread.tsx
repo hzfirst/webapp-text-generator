@@ -8,6 +8,7 @@ import RichAnswer from './rich-answer'
 import { getAnswerCopyText, parseRichAnswer } from './rich-answer-utils'
 import { Markdown } from '@/app/components/base/markdown'
 import Toast from '@/app/components/base/toast'
+import ZoomableImage from '@/app/components/base/zoomable-image'
 import type { VisionFile } from '@/types/app'
 
 export type ChatMessage = {
@@ -85,16 +86,13 @@ const ChatThread: FC<ChatThreadProps> = ({
                     {userImages.length > 0 && (
                       <div className='flex flex-wrap justify-end gap-2'>
                         {userImages.map((image, imageIndex) => (
-                          <div
+                          <ZoomableImage
                             key={`${message.id}-image-${imageIndex}`}
-                            className='overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-sm'
-                          >
-                            <img
-                              src={image.url}
-                              alt='用户上传的系统截图'
-                              className='h-40 w-56 max-w-full rounded-md bg-slate-50 object-contain'
-                            />
-                          </div>
+                            src={image.url!}
+                            alt='用户上传的系统截图'
+                            wrapperClassName='overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-sm'
+                            className='h-40 w-56 max-w-full rounded-md bg-slate-50 object-contain'
+                          />
                         ))}
                       </div>
                     )}

@@ -1,5 +1,6 @@
 export type MediaItem = {
   source_id?: string
+  category?: string
   title?: string
   url?: string
   poster_url?: string
@@ -20,6 +21,20 @@ export type RichAnswerData = {
   conversation?: ConversationContext
 }
 
+export type RichAnswerSection = {
+  category: string
+  answer: string
+  image_urls: MediaItem[]
+  video_urls: MediaItem[]
+}
+
+export type MultiCategoryAnswer = {
+  intro: string
+  sections: RichAnswerSection[]
+  unassigned_image_urls: MediaItem[]
+  unassigned_video_urls: MediaItem[]
+}
+
 export type ConversationContext = {
   active_topic: string
   context_summary: string
@@ -27,6 +42,204 @@ export type ConversationContext = {
   candidate_topics: string[]
   last_resolved_question: string
   resolved: boolean
+}
+
+function cleanCategory(value?: string): string {
+  return `${value || ''}`.trim()
+}
+
+function getCategoryAliases(category: string): string[] {
+  const aliases = [category]
+  const conciseCategory = category.replace(/(?:明细|功能)$/, '').trim()
+
+  if (conciseCategory.length >= 2 && conciseCategory !== category)
+    aliases.push(conciseCategory)
+
+  return aliases.sort((left, right) => right.length - left.length)
+}
+
+function getAnswerLineCategory(line: string, categories: string[]): number {
+  const isMarkdownHeading = /^\s{0,3}#{1,6}\s+/.test(line)
+  const normalizedLine = line
+    .replace(/^\s{0,3}#{1,6}\s+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/^\s*(?:第[一二三四五六七八九十\d]+部分\s*[：:、.-]?|[（(]?(?:\d+|[一二三四五六七八九十]+)[）).、:：-])\s*/, '')
+    .trim()
+
+  let matchedCategory = -1
+  let matchedAliasLength = 0
+
+  categories.forEach((category, index) => {
+    getCategoryAliases(category).forEach((alias) => {
+      const startsWithCategory = normalizedLine.startsWith(alias)
+      const headingContainsCategory = isMarkdownHeading && normalizedLine.includes(alias)
+
+      if ((startsWithCategory || headingContainsCategory) && alias.length > matchedAliasLength) {
+        matchedCategory = index
+        matchedAliasLength = alias.length
+      }
+    })
+  })
+
+  return matchedCategory
+}
+
+function isCategoryOnlyHeading(line: string, category: string): boolean {
+  const normalizedLine = line
+    .replace(/^\s{0,3}#{1,6}\s+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/^\s*(?:第[一二三四五六七八九十\d]+部分\s*[：:、.-]?|[（(]?(?:\d+|[一二三四五六七八九十]+)[）).、:：-])\s*/, '')
+    .trim()
+
+  return getCategoryAliases(category).some((alias) => {
+    if (!normalizedLine.startsWith(alias))
+      return false
+
+    const remainder = normalizedLine.slice(alias.length)
+      .replace(/^[\s:：,，、.-]+/, '')
+      .trim()
+
+    return !remainder
+      || /^(?:具体)?(?:要)?怎么(?:做|操作)[？?。.]?$/.test(remainder)
+      || /^(?:对应的)?操作(?:说明|步骤)[：:]?$/.test(remainder)
+  })
+}
+
+function stripSectionOrderMarker(line: string): string {
+  return line.replace(
+    /^(\s*(?:#{1,6}\s+)?(?:\*\*)?)\s*(?:第[一二三四五六七八九十\d]+部分\s*[：:、.-]?|[（(]?(?:\d+|[一二三四五六七八九十]+)[）).、:：-])\s*/,
+    '$1',
+  )
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function splitAnswerByCategory(answer: string, categories: string[]) {
+  const sectionLines = categories.map(() => [] as string[])
+  const introLines: string[] = []
+  let activeCategory = -1
+  const categoryPattern = categories
+    .flatMap(getCategoryAliases)
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+    .join('|')
+  const normalizedAnswer = categoryPattern
+    ? answer.replace(
+      new RegExp(`([。；;，,])\\s*(?=(?:\\d+|[一二三四五六七八九十]+)[）).、:：-]\\s*(?:${categoryPattern}))`, 'g'),
+      '$1\n',
+    )
+    : answer
+
+  normalizedAnswer.replace(/\r/g, '').split('\n').forEach((line) => {
+    const lineCategory = getAnswerLineCategory(line, categories)
+
+    if (lineCategory >= 0) {
+      activeCategory = lineCategory
+      if (!isCategoryOnlyHeading(line, categories[lineCategory]))
+        sectionLines[activeCategory].push(stripSectionOrderMarker(line))
+      return
+    }
+
+    if (activeCategory >= 0)
+      sectionLines[activeCategory].push(line)
+    else
+      introLines.push(line)
+  })
+
+  return {
+    intro: introLines.join('\n').trim(),
+    sectionAnswers: sectionLines.map(lines => lines.join('\n').trim()),
+  }
+}
+
+function findCategoryIndex(category: string, categories: string[]): number {
+  const normalizedCategory = cleanCategory(category)
+  if (!normalizedCategory)
+    return -1
+
+  return categories.findIndex(candidate => cleanCategory(candidate) === normalizedCategory)
+}
+
+function orderCategoriesByQuestion(categories: string[], question?: string): string[] {
+  const normalizedQuestion = `${question || ''}`.trim()
+  if (!normalizedQuestion)
+    return categories
+
+  return categories
+    .map((category, originalIndex) => {
+      const positions = getCategoryAliases(category)
+        .map(alias => normalizedQuestion.indexOf(alias))
+        .filter(position => position >= 0)
+
+      return {
+        category,
+        originalIndex,
+        questionIndex: positions.length > 0 ? Math.min(...positions) : Number.MAX_SAFE_INTEGER,
+      }
+    })
+    .sort((left, right) => (
+      left.questionIndex - right.questionIndex
+      || left.originalIndex - right.originalIndex
+    ))
+    .map(item => item.category)
+}
+
+export function getMultiCategoryAnswer(data: RichAnswerData): MultiCategoryAnswer | null {
+  if (data.conversation?.active_topic !== 'multi_category')
+    return null
+
+  const categories: string[] = []
+  const addCategory = (value?: string) => {
+    const category = cleanCategory(value)
+    if (category && !categories.includes(category))
+      categories.push(category)
+  }
+
+  data.conversation.candidate_topics.forEach(addCategory)
+  data.image_urls?.forEach(item => addCategory(item.category))
+  data.video_urls?.forEach(item => addCategory(item.category))
+
+  if (categories.length < 2)
+    return null
+
+  const orderedCategories = orderCategoriesByQuestion(
+    categories,
+    data.conversation.last_resolved_question,
+  )
+  const { intro, sectionAnswers } = splitAnswerByCategory(data.answer || '', orderedCategories)
+  const sections = orderedCategories.map((category, index) => ({
+    category,
+    answer: sectionAnswers[index],
+    image_urls: [] as MediaItem[],
+    video_urls: [] as MediaItem[],
+  }))
+  const unassignedImageUrls: MediaItem[] = []
+  const unassignedVideoUrls: MediaItem[] = []
+
+  data.image_urls?.forEach((item) => {
+    const sectionIndex = findCategoryIndex(item.category || '', orderedCategories)
+    if (sectionIndex >= 0)
+      sections[sectionIndex].image_urls.push(item)
+    else
+      unassignedImageUrls.push(item)
+  })
+
+  data.video_urls?.forEach((item) => {
+    const sectionIndex = findCategoryIndex(item.category || '', orderedCategories)
+    if (sectionIndex >= 0)
+      sections[sectionIndex].video_urls.push(item)
+    else
+      unassignedVideoUrls.push(item)
+  })
+
+  return {
+    intro,
+    sections,
+    unassigned_image_urls: unassignedImageUrls,
+    unassigned_video_urls: unassignedVideoUrls,
+  }
 }
 
 function parseEmbeddedJson(text: string): unknown {
@@ -129,5 +342,6 @@ export function conversationToInputs(conversation: ConversationContext): Record<
     waiting_for: conversation.waiting_for,
     candidate_topics: JSON.stringify(conversation.candidate_topics),
     last_resolved_question: conversation.last_resolved_question,
+    resolved: conversation.resolved ? 'true' : 'false',
   }
 }

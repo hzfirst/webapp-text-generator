@@ -15,7 +15,7 @@ import TabHeader from '@/app/components/base/tab-header'
 import useBreakpoints, { MediaType } from '@/hooks/use-breakpoints'
 import { fetchAppParams, updateFeedback } from '@/service'
 import Toast from '@/app/components/base/toast'
-import type { Feedbacktype, PromptConfig, VisionFile, VisionSettings } from '@/types/app'
+import type { Feedbacktype, PromptConfig, PromptVariable, VisionFile, VisionSettings } from '@/types/app'
 import { Resolution, TransferMethod } from '@/types/app'
 import { changeLanguage } from '@/i18n/i18next-config'
 import Loading from '@/app/components/base/loading'
@@ -25,6 +25,14 @@ import { userInputsFormToPromptVariables } from '@/utils/prompt'
 import { conversationToInputs, parseRichAnswer } from '@/app/components/result/rich-answer-utils'
 
 const GROUP_SIZE = 5 // to avoid RPM(Request per minute) limit. The group task finished then the next group.
+const FALLBACK_QUESTION_VARIABLE: PromptVariable = {
+  key: 'cw',
+  name: '当前用户问题',
+  type: 'string',
+  required: false,
+  max_length: DEFAULT_VALUE_MAX_LEN,
+}
+
 enum TaskStatus {
   pending = 'pending',
   running = 'running',
@@ -392,8 +400,22 @@ const TextGeneration = () => {
       try {
         changeLanguage(APP_INFO.default_language)
 
-        const { user_input_form, file_upload, system_parameters }: any = await fetchAppParams()
-        const prompt_variables = userInputsFormToPromptVariables(user_input_form)
+        const parameters: any = await fetchAppParams()
+        const hasParameterObject = Boolean(parameters)
+          && typeof parameters === 'object'
+          && !Array.isArray(parameters)
+        const parameterConfig = hasParameterObject ? parameters : {}
+        const user_input_form = Array.isArray(parameterConfig.user_input_form)
+          ? parameterConfig.user_input_form
+          : []
+        const hasRemoteInputConfig = user_input_form.length > 0
+        const file_upload = parameterConfig.file_upload
+        const system_parameters = parameterConfig.system_parameters
+        const hasRemoteImageSetting = typeof file_upload?.image?.enabled === 'boolean'
+        const remotePromptVariables = userInputsFormToPromptVariables(user_input_form)
+        const prompt_variables = remotePromptVariables.some(variable => variable.key === 'cw')
+          ? remotePromptVariables
+          : [FALLBACK_QUESTION_VARIABLE, ...remotePromptVariables]
         const fileListConfig = user_input_form
           ?.find((item: any) => item['file-list'])
           ?.['file-list']
@@ -410,7 +432,8 @@ const TextGeneration = () => {
           // 新工作流存在 file-list 时也要开启上传区域
           enabled:
             Boolean(fileListConfig)
-            || Boolean(file_upload?.image?.enabled),
+            || Boolean(file_upload?.image?.enabled)
+            || (!hasRemoteInputConfig && !hasRemoteImageSetting),
 
           // 工作流文件变量名来自 Dify 配置，不能固定写死。
           variable: fileListConfig?.variable || 'image',

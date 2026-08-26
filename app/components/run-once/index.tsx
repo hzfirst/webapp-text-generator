@@ -22,6 +22,7 @@ const SYSTEM_CONTEXT_KEYS = new Set([
   'waiting_for',
   'candidate_topics',
   'last_resolved_question',
+  'resolved',
 ])
 
 const RunOnce: FC<IRunOnceProps> = ({
