@@ -6,6 +6,7 @@ import RehypeKatex from 'rehype-katex'
 import RemarkGfm from 'remark-gfm'
 import SyntaxHighlighter from 'react-syntax-highlighter'
 import { atelierHeathLight } from 'react-syntax-highlighter/dist/esm/styles/hljs'
+import ZoomableImage from '@/app/components/base/zoomable-image'
 
 export function Markdown(props: { content: string }) {
   return (
@@ -16,7 +17,20 @@ export function Markdown(props: { content: string }) {
           RehypeKatex,
         ]}
         components={{
-          code({ node, inline, className, children, ...props }) {
+          img({ src, alt }) {
+            if (!src)
+              return null
+
+            return (
+              <ZoomableImage
+                src={src}
+                alt={alt || '回答图片'}
+                wrapperClassName='mx-auto my-[14px] w-fit max-w-full'
+                className='!my-0 max-h-[620px] max-w-full object-contain'
+              />
+            )
+          },
+          code({ node: _node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '')
             return (!inline && match)
               ? (
